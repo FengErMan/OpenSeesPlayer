@@ -606,6 +606,17 @@ target_link_libraries(G3
 
 add_library(OpenSeesLIB  EXCLUDE_FROM_ALL)
 
+# [MinGW fix, 2026-11-17] gfortran/OpenBLAS export lowercase symbols with a
+# trailing underscore (for example dgesv_), while OpenSees C++ declarations
+# refer to Intel-style uppercase symbols (DGESV). The alias archive added below
+# supplies those names for Windows GNU builds. It and OpenSeesLIB also have
+# references to each other, so the executable links them in a GNU ld group.
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  enable_language(ASM)
+  add_library(OPS_SymbolAlias STATIC ${OPS_BUNDLED_DIR}/symbol_alias.S)
+  set_target_properties(OPS_SymbolAlias PROPERTIES LINKER_LANGUAGE CXX)
+endif()
+
 #
 # For UMFPACK long int DLONG version -- Gustavo, Michael
 #
@@ -712,6 +723,13 @@ target_link_libraries(OpenSees
   ZLIB::ZLIB
   Eigen3::Eigen
 )
+
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  # [MinGW fix] Resolve the mutual static-library references by rescanning both
+  # archives; without the group GNU ld leaves Fortran symbols undefined.
+  target_link_libraries(OpenSees
+    -Wl,--start-group OpenSeesLIB OPS_SymbolAlias -Wl,--end-group)
+endif()
 
 # OPS_INTERPRETER may reference PythonEvaluator when _PYTHON3 is set; that object
 # is only linked into OpenSeesPy (macOS extension modules resolve at load time).
